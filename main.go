@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
+	"main.go/constants"
 	"main.go/database"
 	"main.go/services"
 )
@@ -31,41 +33,35 @@ func main() {
 		Timeout: 10 * time.Second,
 	}
 
-	// Fetch URL
-	url := "https://www.google.com"
 	urlFetcher := services.NewUrlFetcher(httpClient)
 
-	fmt.Printf("Fetching URL: %s\n", url)
-	content, err := urlFetcher.FetchUrl(url)
-	if err != nil {
-		fmt.Printf("Error fetching the URL: %v\n", err)
-		return
+	var wg sync.WaitGroup
+
+	for _, url := range constants.URLS_TO_FETCH {
+		wg.Add(1)
+		go func(url string) {
+			defer wg.Done()
+			fmt.Printf("Fetching URL: %s\n", url)
+
+			content, err := urlFetcher.FetchUrl(url)
+			if err != nil {
+				fmt.Printf("Error fetching the URL: %v\n", err)
+				return
+			}
+
+			urlProcessor := services.NewUrlResponseProcessor(repo)
+			err = urlProcessor.ProcessAndStoreUrlResponse(url, content)
+
+			if err != nil {
+				fmt.Printf("Error processing and storing URL response: %v\n", err)
+				return
+			}
+
+			fmt.Printf("Successfully processed and stored URL: %s\n", url)
+		}(url)
 	}
 
-	fmt.Printf("Fetched content length: %d bytes\n", len(content))
-
-	// Save to database
-	fmt.Println("Saving to database...")
-	record, err := repo.CreateUrlRecord(url, content)
-	if err != nil {
-		fmt.Printf("Error saving to database: %v\n", err)
-		fmt.Println("Continuing with the error...")
-	}
-
-	if record != nil {
-		fmt.Printf("Saved record with ID: %d\n", record.ID)
-
-		// Retrieve from database
-		fmt.Println("Retrieving from database...")
-		retrieved, err := repo.GetUrlRecordByID(record.ID)
-		if err != nil {
-			fmt.Printf("Error retrieving record: %v\n", err)
-			return
-		}
-
-		fmt.Printf("Retrieved record - ID: %d, URL: %s, Created: %s\n",
-			retrieved.ID, retrieved.URL, retrieved.CreatedAt)
-	}
+	wg.Wait()
 
 	// Get all records
 	fmt.Println("All records in database:")
