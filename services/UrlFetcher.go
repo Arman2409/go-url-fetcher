@@ -1,12 +1,13 @@
 package services
 
 import (
+	"context"
 	"io"
 	"net/http"
 )
 
 type IUrlFetcher interface {
-   FetchUrl(url string) (string, error)
+   FetchUrlWithContext(ctx context.Context, url string) (string, error)
 }
 
 type UrlFetcher struct {
@@ -17,8 +18,12 @@ func NewUrlFetcher(client *http.Client) IUrlFetcher {
 	return &UrlFetcher{client: client}
 }
 
-func (f *UrlFetcher) FetchUrl(url string) (string, error) {
-	resp, err := f.client.Get(url);
+func (f *UrlFetcher) FetchUrlWithContext(ctx context.Context, url string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := f.client.Do(req)
 	if err != nil {
 		return "", err
 	}

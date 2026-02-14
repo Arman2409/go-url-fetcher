@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -26,8 +27,6 @@ func main() {
 
 	fmt.Println("Database initialized successfully!")
 
-	// 	fmt.Println("Database initialized successfully")
-
 	// Create HTTP client with timeout
 	httpClient := &http.Client{
 		Timeout: 10 * time.Second,
@@ -43,14 +42,18 @@ func main() {
 			defer wg.Done()
 			fmt.Printf("Fetching URL: %s\n", url)
 
-			content, err := urlFetcher.FetchUrl(url)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+			defer cancel()
+
+			content, err := urlFetcher.FetchUrlWithContext(ctx, url)
 			if err != nil {
 				fmt.Printf("Error fetching the URL: %v\n", err)
 				return
 			}
 
 			urlProcessor := services.NewUrlResponseProcessor(repo)
-			err = urlProcessor.ProcessAndStoreUrlResponse(url, content)
+			err = urlProcessor.ProcessAndStoreUrlResponseWithContext(ctx, url, content)
 
 			if err != nil {
 				fmt.Printf("Error processing and storing URL response: %v\n", err)

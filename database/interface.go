@@ -1,11 +1,15 @@
 package database
 
-import "main.go/models"
+import (
+	"context"
+
+	"main.go/models"
+)
 
 // IRepository defines the interface for database operations
 type IRepository interface {
 	// CreateUrlRecord inserts a new URL record into the database
-	CreateUrlRecord(url, content string) (*models.UrlRecord, error)
+	CreateUrlRecordWithContext(ctx context.Context, url, content string) (*models.UrlRecord, error)
 
 	// GetUrlRecordByID retrieves a URL record by its ID
 	GetUrlRecordByID(id int64) (*models.UrlRecord, error)

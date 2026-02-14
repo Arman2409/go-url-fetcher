@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -60,7 +61,7 @@ func (r *SQLiteRepository) initSchema() error {
 }
 
 // CreateUrlRecord inserts a new URL record into the database
-func (r *SQLiteRepository) CreateUrlRecord(url, content string) (*models.UrlRecord, error) {
+func (r *SQLiteRepository) CreateUrlRecordWithContext(ctx context.Context, url, content string) (*models.UrlRecord, error) {
 	createdAt := time.Now().Format(time.RFC3339)
 
 	query := `
@@ -68,7 +69,7 @@ func (r *SQLiteRepository) CreateUrlRecord(url, content string) (*models.UrlReco
 	VALUES (?, ?, ?)
 	`
 
-	result, err := r.db.Exec(query, url, content, createdAt)
+	result, err := r.db.ExecContext(ctx, query, url, content, createdAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert record: %w", err)
 	}
