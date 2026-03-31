@@ -36,7 +36,15 @@ func main() {
 
 	var wg sync.WaitGroup
 
+	uniqueUrls := make(map[string]bool)
+
 	for _, url := range constants.URLS_TO_FETCH {
+		if _, exists := uniqueUrls[url]; exists {
+			fmt.Printf("Skipping duplicate URL: %s\n", url)
+			continue
+		}
+		uniqueUrls[url] = true
+
 		wg.Add(1)
 		go func(url string) {
 			defer wg.Done()
