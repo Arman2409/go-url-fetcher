@@ -33,8 +33,38 @@ func main() {
 	}
 
 	urlFetcher := services.NewUrlFetcher(httpClient)
+	urlProcessor := services.NewUrlResponseProcessor(repo)
 
 	var wg sync.WaitGroup
+	jobs := make(chan string)
+	workerCount := 3
+
+	for i := range workerCount {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for url := range jobs {
+				fmt.Printf("Worker %d fetching URL: %s\n", workerID, url)
+
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				content, err := urlFetcher.FetchUrlWithContext(ctx, url)
+				if err != nil {
+					fmt.Printf("Error fetching the URL: %v\n", err)
+					cancel()
+					continue
+				}
+
+				err = urlProcessor.ProcessAndStoreUrlResponseWithContext(ctx, url, content)
+				cancel()
+				if err != nil {
+					fmt.Printf("Error processing and storing URL response: %v\n", err)
+					continue
+				}
+
+				fmt.Printf("Successfully processed and stored URL: %s\n", url)
+			}
+		}(i + 1)
+	}
 
 	uniqueUrls := make(map[string]bool)
 
@@ -44,33 +74,9 @@ func main() {
 			continue
 		}
 		uniqueUrls[url] = true
-
-		wg.Add(1)
-		go func(url string) {
-			defer wg.Done()
-			fmt.Printf("Fetching URL: %s\n", url)
-
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-
-			defer cancel()
-
-			content, err := urlFetcher.FetchUrlWithContext(ctx, url)
-			if err != nil {
-				fmt.Printf("Error fetching the URL: %v\n", err)
-				return
-			}
-
-			urlProcessor := services.NewUrlResponseProcessor(repo)
-			err = urlProcessor.ProcessAndStoreUrlResponseWithContext(ctx, url, content)
-
-			if err != nil {
-				fmt.Printf("Error processing and storing URL response: %v\n", err)
-				return
-			}
-
-			fmt.Printf("Successfully processed and stored URL: %s\n", url)
-		}(url)
+		jobs <- url
 	}
+	close(jobs)
 
 	wg.Wait()
 
