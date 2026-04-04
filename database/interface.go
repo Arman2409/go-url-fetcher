@@ -9,7 +9,7 @@ import (
 // IRepository defines the interface for database operations
 type IRepository interface {
 	// CreateUrlRecord inserts a new URL record into the database
-	CreateUrlRecordWithContext(ctx context.Context, url, content string) (*models.UrlRecord, error)
+	CreateUrlRecordWithContext(ctx context.Context, url string, statusCode int, content string) (*models.UrlRecord, error)
 
 	// GetUrlRecordByID retrieves a URL record by its ID
 	GetUrlRecordByID(id int64) (*models.UrlRecord, error)

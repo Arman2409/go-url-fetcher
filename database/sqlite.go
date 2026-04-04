@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -47,6 +48,7 @@ func (r *SQLiteRepository) initSchema() error {
 	CREATE TABLE IF NOT EXISTS url_records (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		url TEXT NOT NULL UNIQUE,
+		status_code INTEGER NOT NULL DEFAULT 0,
 		content TEXT NOT NULL,
 		created_at TEXT NOT NULL
 	);
@@ -57,19 +59,23 @@ func (r *SQLiteRepository) initSchema() error {
 		return fmt.Errorf("failed to create table: %w", err)
 	}
 
+	if err := r.ensureStatusCodeColumn(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 // CreateUrlRecord inserts a new URL record into the database
-func (r *SQLiteRepository) CreateUrlRecordWithContext(ctx context.Context, url, content string) (*models.UrlRecord, error) {
+func (r *SQLiteRepository) CreateUrlRecordWithContext(ctx context.Context, url string, statusCode int, content string) (*models.UrlRecord, error) {
 	createdAt := time.Now().Format(time.RFC3339)
 
 	query := `
-	INSERT INTO url_records (url, content, created_at)
-	VALUES (?, ?, ?)
+	INSERT INTO url_records (url, status_code, content, created_at)
+	VALUES (?, ?, ?, ?)
 	`
 
-	result, err := r.db.ExecContext(ctx, query, url, content, createdAt)
+	result, err := r.db.ExecContext(ctx, query, url, statusCode, content, createdAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert record: %w", err)
 	}
@@ -80,17 +86,18 @@ func (r *SQLiteRepository) CreateUrlRecordWithContext(ctx context.Context, url, 
 	}
 
 	return &models.UrlRecord{
-		ID:        id,
-		URL:       url,
-		Content:   content,
-		CreatedAt: createdAt,
+		ID:         id,
+		URL:        url,
+		StatusCode: statusCode,
+		Content:    content,
+		CreatedAt:  createdAt,
 	}, nil
 }
 
 // GetUrlRecordByID retrieves a URL record by its ID
 func (r *SQLiteRepository) GetUrlRecordByID(id int64) (*models.UrlRecord, error) {
 	query := `
-	SELECT id, url, content, created_at
+	SELECT id, url, status_code, content, created_at
 	FROM url_records
 	WHERE id = ?
 	`
@@ -99,6 +106,7 @@ func (r *SQLiteRepository) GetUrlRecordByID(id int64) (*models.UrlRecord, error)
 	err := r.db.QueryRow(query, id).Scan(
 		&record.ID,
 		&record.URL,
+		&record.StatusCode,
 		&record.Content,
 		&record.CreatedAt,
 	)
@@ -115,7 +123,7 @@ func (r *SQLiteRepository) GetUrlRecordByID(id int64) (*models.UrlRecord, error)
 // GetUrlRecordByURL retrieves a URL record by its URL
 func (r *SQLiteRepository) GetUrlRecordByURL(url string) (*models.UrlRecord, error) {
 	query := `
-	SELECT id, url, content, created_at
+	SELECT id, url, status_code, content, created_at
 	FROM url_records
 	WHERE url = ?
 	`
@@ -124,6 +132,7 @@ func (r *SQLiteRepository) GetUrlRecordByURL(url string) (*models.UrlRecord, err
 	err := r.db.QueryRow(query, url).Scan(
 		&record.ID,
 		&record.URL,
+		&record.StatusCode,
 		&record.Content,
 		&record.CreatedAt,
 	)
@@ -140,7 +149,7 @@ func (r *SQLiteRepository) GetUrlRecordByURL(url string) (*models.UrlRecord, err
 // GetAllUrlRecords retrieves all URL records
 func (r *SQLiteRepository) GetAllUrlRecords() ([]*models.UrlRecord, error) {
 	query := `
-	SELECT id, url, content, created_at
+	SELECT id, url, status_code, content, created_at
 	FROM url_records
 	ORDER BY created_at DESC
 	`
@@ -157,6 +166,7 @@ func (r *SQLiteRepository) GetAllUrlRecords() ([]*models.UrlRecord, error) {
 		if err := rows.Scan(
 			&record.ID,
 			&record.URL,
+			&record.StatusCode,
 			&record.Content,
 			&record.CreatedAt,
 		); err != nil {
@@ -196,4 +206,43 @@ func (r *SQLiteRepository) DeleteUrlRecord(id int64) error {
 // Close closes the database connection
 func (r *SQLiteRepository) Close() error {
 	return r.db.Close()
+}
+
+func (r *SQLiteRepository) ensureStatusCodeColumn() error {
+	rows, err := r.db.Query(`PRAGMA table_info(url_records);`)
+	if err != nil {
+		return fmt.Errorf("failed to inspect schema: %w", err)
+	}
+	defer rows.Close()
+
+	hasStatusCode := false
+	for rows.Next() {
+		var cid int
+		var name string
+		var colType string
+		var notNull int
+		var defaultValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &defaultValue, &pk); err != nil {
+			return fmt.Errorf("failed to scan schema info: %w", err)
+		}
+		if name == "status_code" {
+			hasStatusCode = true
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("failed iterating schema info: %w", err)
+	}
+
+	if hasStatusCode {
+		return nil
+	}
+
+	_, err = r.db.Exec(`ALTER TABLE url_records ADD COLUMN status_code INTEGER NOT NULL DEFAULT 0;`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("failed to add status_code column: %w", err)
+	}
+
+	return nil
 }

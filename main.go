@@ -46,15 +46,16 @@ func main() {
 			for url := range jobs {
 				fmt.Printf("Worker %d fetching URL: %s\n", workerID, url)
 
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				content, err := urlFetcher.FetchUrlWithContext(ctx, url)
+				// Allow time for multiple fetch attempts (retries + http.Client timeout per attempt).
+				ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+				content, statusCode, err := urlFetcher.FetchUrlWithContext(ctx, url)
 				if err != nil {
 					fmt.Printf("Error fetching the URL: %v\n", err)
 					cancel()
 					continue
 				}
 
-				err = urlProcessor.ProcessAndStoreUrlResponseWithContext(ctx, url, content)
+				err = urlProcessor.ProcessAndStoreUrlResponseWithContext(ctx, url, statusCode, content)
 				cancel()
 				if err != nil {
 					fmt.Printf("Error processing and storing URL response: %v\n", err)
@@ -89,7 +90,7 @@ func main() {
 	}
 
 	for _, rec := range allRecords {
-		fmt.Printf("  ID: %d, URL: %s, Content Length: %d bytes, Created: %s\n",
-			rec.ID, rec.URL, len(rec.Content), rec.CreatedAt)
+		fmt.Printf("  ID: %d, URL: %s, Status: %d, Content Length: %d bytes, Created: %s\n",
+			rec.ID, rec.URL, rec.StatusCode, len(rec.Content), rec.CreatedAt)
 	}
 }

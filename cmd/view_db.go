@@ -45,7 +45,7 @@ func main() {
 	// Show records from url_records table
 	fmt.Println("\n=== URL Records ===")
 	recordRows, err := db.Query(`
-		SELECT id, url, LENGTH(content) as content_length, created_at 
+		SELECT id, url, status_code, LENGTH(content) as content_length, created_at 
 		FROM url_records 
 		ORDER BY created_at DESC
 	`)
@@ -55,16 +55,17 @@ func main() {
 	}
 	defer recordRows.Close()
 
-	fmt.Printf("%-5s %-50s %-15s %-25s\n", "ID", "URL", "Content Length", "Created At")
-	fmt.Println(strings.Repeat("-", 100))
+	fmt.Printf("%-5s %-50s %-10s %-15s %-25s\n", "ID", "URL", "Status", "Content Length", "Created At")
+	fmt.Println(strings.Repeat("-", 120))
 
 	for recordRows.Next() {
 		var id int64
 		var url string
+		var statusCode int
 		var contentLength int
 		var createdAt string
 
-		if err := recordRows.Scan(&id, &url, &contentLength, &createdAt); err != nil {
+		if err := recordRows.Scan(&id, &url, &statusCode, &contentLength, &createdAt); err != nil {
 			fmt.Printf("Error scanning record: %v\n", err)
 			continue
 		}
@@ -74,7 +75,7 @@ func main() {
 			url = url[:44] + "..."
 		}
 
-		fmt.Printf("%-5d %-50s %-15d %-25s\n", id, url, contentLength, createdAt)
+		fmt.Printf("%-5d %-50s %-10d %-15d %-25s\n", id, url, statusCode, contentLength, createdAt)
 	}
 
 	// Count records
@@ -84,4 +85,3 @@ func main() {
 		fmt.Printf("\nTotal records: %d\n", count)
 	}
 }
-
