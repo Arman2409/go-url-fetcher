@@ -11,6 +11,7 @@ import (
 	"main.go/constants"
 	"main.go/database"
 	"main.go/services"
+	appTypes "main.go/types"
 )
 
 func main() {
@@ -37,7 +38,17 @@ func main() {
 
 	var wg sync.WaitGroup
 	jobs := make(chan string)
+	results := make(chan appTypes.FetchResult)
 	workerCount := 3
+
+	var collectorWG sync.WaitGroup
+	statsRunner := services.NewStatsRunner()
+
+	collectorWG.Add(1)
+	go func() {
+		defer collectorWG.Done()
+		statsRunner.Consume(results)
+	}()
 
 	for i := range workerCount {
 		wg.Add(1)
@@ -45,6 +56,7 @@ func main() {
 			defer wg.Done()
 			for url := range jobs {
 				fmt.Printf("Worker %d fetching URL: %s\n", workerID, url)
+				start := time.Now()
 
 				// Allow time for multiple fetch attempts (retries + http.Client timeout per attempt).
 				ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
@@ -52,6 +64,12 @@ func main() {
 				if err != nil {
 					fmt.Printf("Error fetching the URL: %v\n", err)
 					cancel()
+					results <- appTypes.FetchResult{
+						URL:        url,
+						StatusCode: statusCode,
+						Duration:   time.Since(start),
+						FetchErr:   err,
+					}
 					continue
 				}
 
@@ -59,10 +77,22 @@ func main() {
 				cancel()
 				if err != nil {
 					fmt.Printf("Error processing and storing URL response: %v\n", err)
+					results <- appTypes.FetchResult{
+						URL:        url,
+						StatusCode: statusCode,
+						Duration:   time.Since(start),
+						StoreErr:   err,
+					}
 					continue
 				}
 
 				fmt.Printf("Successfully processed and stored URL: %s\n", url)
+				results <- appTypes.FetchResult{
+					URL:        url,
+					StatusCode: statusCode,
+					Duration:   time.Since(start),
+					Stored:     true,
+				}
 			}
 		}(i + 1)
 	}
@@ -72,6 +102,10 @@ func main() {
 	for _, url := range constants.URLS_TO_FETCH {
 		if _, exists := uniqueUrls[url]; exists {
 			fmt.Printf("Skipping duplicate URL: %s\n", url)
+			results <- appTypes.FetchResult{
+				URL:          url,
+				WasDuplicate: true,
+			}
 			continue
 		}
 		uniqueUrls[url] = true
@@ -80,6 +114,19 @@ func main() {
 	close(jobs)
 
 	wg.Wait()
+	close(results)
+	collectorWG.Wait()
+	stats := statsRunner.Stats()
+
+	fmt.Printf("Run summary: queued=%d stored=%d duplicates=%d fetch_failed=%d store_failed=%d non_2xx=%d avg_duration=%s\n",
+		stats.Queued,
+		stats.StoredSuccess,
+		stats.Duplicates,
+		stats.FetchFailed,
+		stats.StoreFailed,
+		stats.Non2xxFailures,
+		stats.AvgDuration(),
+	)
 
 	// Get all records
 	fmt.Println("All records in database:")
