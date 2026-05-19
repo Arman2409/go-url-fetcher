@@ -33,3 +33,15 @@ go run main.go
 ```
 
 Results are saved to `url_fetcher.db` in the project root.
+
+## Scripts
+
+**View raw DB records** — prints all rows in a formatted table:
+```bash
+go run cmd/view_db.go url_fetcher.db
+```
+
+**Print summary** — aggregated stats from the DB (total URLs, avg content size, status code breakdown):
+```bash
+go run cmd/summary.go --db url_fetcher.db
+```
