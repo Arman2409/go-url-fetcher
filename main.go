@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync"
 	"time"
+	"flag"
 
 	"main.go/constants"
 	"main.go/database"
@@ -39,7 +40,10 @@ func main() {
 	var wg sync.WaitGroup
 	jobs := make(chan string)
 	results := make(chan appTypes.FetchResult)
-	workerCount := 3
+	workerCount := flag.Int("workers", 3, "number of workers to use")
+	flag.Parse()
+
+	fmt.Println("Worker count:", *workerCount)
 
 	var collectorWG sync.WaitGroup
 	statsRunner := services.NewStatsRunner()
@@ -50,7 +54,7 @@ func main() {
 		statsRunner.Consume(results)
 	}()
 
-	for i := range workerCount {
+	for i := range *workerCount {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
